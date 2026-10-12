@@ -2,7 +2,7 @@ name: VPN Gate Node Check
 
 on:
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 
 permissions:
@@ -71,3 +71,17 @@ jobs:
 
       - name: Show site URL
         run: 'echo "site: https://adjlevis.github.io/gate/ (deploy outcome: ${{ steps.deployment.outcome }})"'
+
+      - name: Send Telegram Notification
+        if: always()
+        run: |
+          if [ "${{ steps.deployment.outcome }}" == "success" ]; then
+            MESSAGE="✅ *VPN Gate 节点检测与部署成功！*%0A🌐 访问地址: https://adjlevis.github.io/gate/"
+          else
+            MESSAGE="❌ *VPN Gate 节点检测或部署失败！*%0A🔍 请检查 GitHub Actions 运行日志。"
+          fi
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TG_CHAT_ID }}" \
+            -d "text=$MESSAGE" \
+            -d "parse_mode=Markdown"
