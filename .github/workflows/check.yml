@@ -1,10 +1,84 @@
-- name: Send Detailed Telegram Notification
+name: VPN Gate Node Check
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: gate-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Get VPN Gate nodes + check via Cloudflare Worker + build page
+        id: run_script
+        run: |
+          python vpngate.py 2>&1 | tee run.log
+        env:
+          CHECK_WORKER: ${{ secrets.DOMAIN }}
+          CHECK_CONCURRENCY: "32"
+          CHECK_TIMEOUT: "90"
+
+      - name: Ensure GitHub Pages is enabled (one-time auto setup)
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")
+          echo "Pages API status: $code"
+          if [ "$code" = "404" ]; then
+            echo "首次运行: 启用 GitHub Pages (source = GitHub Actions, 目录 /public)"
+            curl -sS -X PUT \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"build_type":"workflow","source":{"branches":["main"],"path":"/public"}}' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pages"
+            echo
+            sleep 10
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'public'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Show site URL
+        run: 'echo "site: https://adjlevis.github.io/gate/ (deploy outcome: ${{ steps.deployment.outcome }})"'
+
+      - name: Send Detailed Telegram Notification
         if: always()
         run: |
           python - << 'EOF'
           import os
           import re
-          import json
           import urllib.request
           import urllib.parse
 
@@ -23,30 +97,24 @@
           residential = "0"
 
           try:
-              json_path = os.path.join("public", "data.json")
-              if os.path.exists(json_path):
-                  with open(json_path, "r", encoding="utf-8") as jf:
-                      data = json.load(jf)
-                      valid_nodes = str(data.get("valid_count", data.get("total_valid", valid_nodes)))
-                      country_count = str(data.get("country_count", country_count))
-                      residential = str(data.get("residential_count", data.get("residential", residential)))
-          except Exception as e:
-              print(f"读取 data.json 出错: {e}")
-
-          try:
               if os.path.exists("run.log"):
                   with open("run.log", "r", encoding="utf-8") as f:
                       content = f.read()
+                      
                       m_raw = re.search(r"获取原始节点[:：]?\s*(\d+)", content)
                       if m_raw: raw_nodes = m_raw.group(1)
+                      
                       m_sstp = re.search(r"SSTP\s*节点[:：]?\s*(\d+)", content, re.IGNORECASE)
                       if m_sstp: sstp_nodes = m_sstp.group(1)
-                      if valid_nodes == "0":
-                          m_valid = re.search(r"可用节点[:：]?\s*(\d+)", content)
-                          if m_valid: valid_nodes = m_valid.group(1)
-                      if country_count == "0":
-                          m_country = re.search(r"国家数量[:：]?\s*(\d+)", content)
-                          if m_country: country_count = m_country.group(1)
+                      
+                      m_valid = re.search(r"可用节点[:：]?\s*(\d+)", content)
+                      if m_valid: valid_nodes = m_valid.group(1)
+                      
+                      m_country = re.search(r"国家数量[:：]?\s*(\d+)", content)
+                      if m_country: country_count = m_country.group(1)
+                      
+                      m_res = re.search(r"住宅[^\d]*(\d+)", content)
+                      if m_res: residential = m_res.group(1)
           except Exception as e:
               print(f"解析日志出错: {e}")
 
@@ -58,9 +126,8 @@
                   f"🔧 SSTP 节点: `{sstp_nodes}`\n"
                   f"🟢 可用节点: `{valid_nodes}`\n"
                   f"🌍 国家数量: `{country_count}`\n"
-                  f"🏠 住宅(估算): `{residential}`\n"
                   "──────────────────────\n"
-                  "🌐 访问地址: [点击查看在线页面](https://dj56.is-a.dev/gate/)"
+                  "🌐 访问地址: [点击查看在线页面](https://adjlevis.github.io/gate/)"
               )
           else:
               message = (
