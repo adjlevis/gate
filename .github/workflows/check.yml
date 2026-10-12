@@ -2,7 +2,7 @@ name: VPN Gate Node Check
 
 on:
   schedule:
-    - cron: "0 */3 * * *"
+    - cron: "0 */12 * * *"
   workflow_dispatch:
 
 permissions:
@@ -124,7 +124,7 @@ jobs:
           # 如果部署成功且获取到了数据，组装成清晰的 TG 消息
           if deploy_outcome == "success":
               message = (
-                  "✅ *VPN Gate 住宅节点检测与部署成功！*\\n"
+                  "✅ *VPN Gate 节点检测与部署成功！*\\n"
                   "──────────────────\\n"
                   f"📥 获取原始节点: `{raw_nodes}`\\n"
                   f"🔧 SSTP 节点: `{sstp_nodes}`\\n"
