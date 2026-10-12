@@ -2,7 +2,7 @@ name: VPN Gate Node Check
 
 on:
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "0 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +33,6 @@ jobs:
       - name: Get VPN Gate nodes + check via Cloudflare Worker + build page
         id: run_script
         run: |
-          # 运行 python 脚本并同时将输出记录到临时文件以便后续提取统计数据
           python vpngate.py 2>&1 | tee run.log
         env:
           CHECK_WORKER: ${{ secrets.DOMAIN }}
@@ -91,56 +90,53 @@ jobs:
               print("Telegram 密钥未配置，跳过发送")
               exit(0)
 
-          # 从运行日志 run.log 中提取各项统计数据
-          raw_nodes = "未知"
-          sstp_nodes = "未知"
-          valid_nodes = "未知"
-          country_count = "未知"
-          residential = "未知"
+          raw_nodes = "0"
+          sstp_nodes = "0"
+          valid_nodes = "0"
+          country_count = "0"
+          residential = "0"
 
           try:
               if os.path.exists("run.log"):
                   with open("run.log", "r", encoding="utf-8") as f:
                       content = f.read()
                       
-                      # 匹配日志中的对应字段
-                      m_raw = re.search(r"获取原始节点[:：]\s*(\d+)", content)
+                      m_raw = re.search(r"获取原始节点[:：]?\s*(\d+)", content)
                       if m_raw: raw_nodes = m_raw.group(1)
                       
-                      m_sstp = re.search(r"SSTP 节点[:：]\s*(\d+)", content)
+                      m_sstp = re.search(r"SSTP\s*节点[:：]?\s*(\d+)", content, re.IGNORECASE)
                       if m_sstp: sstp_nodes = m_sstp.group(1)
                       
-                      m_valid = re.search(r"可用节点[:：]\s*(\d+)", content)
+                      m_valid = re.search(r"可用节点[:：]?\s*(\d+)", content)
                       if m_valid: valid_nodes = m_valid.group(1)
                       
-                      m_country = re.search(r"国家数量[:：]\s*(\d+)", content)
+                      m_country = re.search(r"国家数量[:：]?\s*(\d+)", content)
                       if m_country: country_count = m_country.group(1)
                       
-                      m_res = re.search(r"住宅\(估算\)[:：]\s*(\d+)", content)
+                      m_res = re.search(r"住宅[^\d]*(\d+)", content)
                       if m_res: residential = m_res.group(1)
           except Exception as e:
               print(f"解析日志出错: {e}")
 
-          # 如果部署成功且获取到了数据，组装成清晰的 TG 消息
           if deploy_outcome == "success":
               message = (
-                  "✅ *VPN Gate 节点检测与部署成功！*\\n"
-                  "──────────────────\\n"
-                  f"📥 获取原始节点: `{raw_nodes}`\\n"
-                  f"🔧 SSTP 节点: `{sstp_nodes}`\\n"
-                  f"🟢 可用节点: `{valid_nodes}`\\n"
-                  f"🌍 国家数量: `{country_count}`\\n"
-                  f"🏠 住宅(估算): `{residential}`\\n"
-                  "──────────────────\\n"
+                  "✅ *VPN Gate 节点检测与部署成功！*\n"
+                  "──────────────────────\n"
+                  f"📥 获取原始节点: `{raw_nodes}`\n"
+                  f"🔧 SSTP 节点: `{sstp_nodes}`\n"
+                  f"🟢 可用节点: `{valid_nodes}`\n"
+                  f"🌍 国家数量: `{country_count}`\n"
+                  f"🏠 住宅(估算): `{residential}`\n"
+                  "──────────────────────\n"
                   "🌐 访问地址: [点击查看在线页面](https://adjlevis.github.io/gate/)"
               )
           else:
               message = (
-                  "❌ *VPN Gate 节点检测或部署失败！*\\n"
-                  "──────────────────\\n"
-                  f"📥 获取原始节点: `{raw_nodes}`\\n"
-                  f"🔧 SSTP 节点: `{sstp_nodes}`\\n"
-                  "──────────────────\\n"
+                  "❌ *VPN Gate 节点检测或部署失败！*\n"
+                  "──────────────────────\n"
+                  f"📥 获取原始节点: `{raw_nodes}`\n"
+                  f"🔧 SSTP 节点: `{sstp_nodes}`\n"
+                  "──────────────────────\n"
                   "🔍 请检查 GitHub Actions 运行日志。"
               )
 
