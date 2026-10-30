@@ -127,6 +127,7 @@ jobs:
                   f"🟢 可用节点: `{valid_nodes}`\n"
                   f"🌍 国家数量: `{country_count}`\n"
                   "──────────────────────\n"
+                  f"🌍 平台: Gihuthub-adjlevis\n"
                   "🌐 访问地址: [点击查看在线页面](https://adjlevis.github.io/gate/)"
               )
           else:
